@@ -1,0 +1,24 @@
+# permissions for end users to edit crdreleases.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crdrelease-editor-role
+rules:
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - crdreleases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - crdreleases/status
+  verbs:
+  - get

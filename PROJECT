@@ -1,0 +1,10 @@
+domain: cloudnativeapp.io
+repo: cloudnativeapp/clm
+resources:
+- group: clm
+  kind: CRDRelease
+  version: v1beta1
+- group: clm
+  kind: Source
+  version: v1beta1
+version: "2"

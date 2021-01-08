@@ -1,0 +1,59 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - crdreleases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - crdreleases/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - events
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - sources
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - sources/status
+  verbs:
+  - get
+  - patch
+  - update
