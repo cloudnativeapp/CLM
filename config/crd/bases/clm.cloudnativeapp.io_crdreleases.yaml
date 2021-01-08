@@ -1,0 +1,480 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.5
+  creationTimestamp: null
+  name: crdreleases.clm.cloudnativeapp.io
+spec:
+  group: clm.cloudnativeapp.io
+  names:
+    kind: CRDRelease
+    listKind: CRDReleaseList
+    plural: crdreleases
+    singular: crdrelease
+  scope: Cluster
+  validation:
+    openAPIV3Schema:
+      description: CRDRelease is the Schema for the crdreleases API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: CRDReleaseSpec defines the desired state of CRDRelease
+          properties:
+            dependencies:
+              description: Dependencies to install this CRDRelease
+              items:
+                properties:
+                  name:
+                    type: string
+                  registry:
+                    description: ' http://example.com/v1/{namespace}/{name}/{version}/content'
+                    properties:
+                      host:
+                        description: Host, ip or hostname.
+                        type: string
+                      namespace:
+                        type: string
+                      protocol:
+                        description: Http default
+                        type: string
+                      relativePath:
+                        description: The http path, version/namespace/releaseName/releaseVersion
+                          default.
+                        type: string
+                      renderParams:
+                        additionalProperties:
+                          type: string
+                        description: Parameters to render the crd release.
+                        type: object
+                      version:
+                        description: Registry version.
+                        type: string
+                    required:
+                    - host
+                    type: object
+                  strategy:
+                    description: Strategy when dependency not found in cluster.
+                    type: string
+                  version:
+                    type: string
+                required:
+                - name
+                - version
+                type: object
+              type: array
+            modules:
+              description: CRDRelease consist of multi modules, every module implements
+                part of functions of release
+              items:
+                properties:
+                  conditions:
+                    description: Indicates whether the module should be managed by
+                      controller.
+                    properties:
+                      resourceExist:
+                        description: All resources should exist.
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            type:
+                              type: string
+                          type: object
+                        type: array
+                      resourceNotExist:
+                        description: All resources should not exist.
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            type:
+                              type: string
+                          type: object
+                        type: array
+                      strategy:
+                        description: Strategy when condition does not met
+                        type: string
+                    type: object
+                  name:
+                    type: string
+                  preCheck:
+                    description: Check before do crd release installation from source,
+                      the installation blocks until check success.
+                    properties:
+                      resourceExist:
+                        description: All resources should exist.
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            type:
+                              type: string
+                          type: object
+                        type: array
+                      resourceNotExist:
+                        description: All resources should not exist.
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            type:
+                              type: string
+                          type: object
+                        type: array
+                      strategy:
+                        description: Strategy when condition does not met
+                        type: string
+                    type: object
+                  readiness:
+                    description: Readiness prober after module installs successfully,
+                      the probe result will change the status of module.
+                    properties:
+                      failureThreshold:
+                        type: integer
+                      httpGet:
+                        description: HTTPGet specifies the http request to perform.
+                        properties:
+                          host:
+                            description: Host name to connect to, defaults to the
+                              pod IP. You probably want to set "Host" in httpHeaders
+                              instead.
+                            type: string
+                          httpHeaders:
+                            description: Custom headers to set in the request. HTTP
+                              allows repeated headers.
+                            items:
+                              properties:
+                                name:
+                                  description: The header field name
+                                  type: string
+                                value:
+                                  description: The header field value
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            type: array
+                          namespace:
+                            description: 'Optional: Set namespace when host as service
+                              name.'
+                            type: string
+                          path:
+                            description: Path to access on the HTTP server.
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: Name or number of the port to access on the
+                              container. Number must be in the range 1 to 65535. Name
+                              must be an IANA_SVC_NAME.
+                            x-kubernetes-int-or-string: true
+                          scheme:
+                            description: Scheme to use for connecting to the host.
+                              Defaults to HTTP.
+                            type: string
+                        required:
+                        - port
+                        type: object
+                      periodSeconds:
+                        type: integer
+                      recoverThreshold:
+                        type: integer
+                      successThreshold:
+                        type: integer
+                      tcpSocket:
+                        description: 'TCPSocket specifies an action involving a TCP
+                          port. TCP hooks not yet supported TODO: implement a realistic
+                          TCP lifecycle hook'
+                        properties:
+                          host:
+                            description: 'Optional: Host name to connect to.'
+                            type: string
+                          namespace:
+                            description: 'Optional: Set namespace when host as service
+                              name.'
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: Number or name of the port to access on the
+                              container. Number must be in the range 1 to 65535. Name
+                              must be an IANA_SVC_NAME.
+                            x-kubernetes-int-or-string: true
+                        required:
+                        - port
+                        type: object
+                      timeoutSeconds:
+                        type: integer
+                    type: object
+                  recover:
+                    description: Indicates whether do source recovery.
+                    properties:
+                      action:
+                        description: Specify the action to recover. Do source recover
+                          when omitted.
+                        properties:
+                          job:
+                            type: string
+                        type: object
+                      retry:
+                        description: Indicates whether retry recover work
+                        type: boolean
+                    type: object
+                  source:
+                    description: The source of module installation.
+                    properties:
+                      name:
+                        type: string
+                      values:
+                        description: Values to do installation from source.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                type: object
+              type: array
+            version:
+              description: The version of CRDRelease to be intalled, Unique combine
+                with release name
+              type: string
+          type: object
+        status:
+          description: CRDReleaseStatus defines the observed state of CRDRelease
+          properties:
+            conditions:
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "make" to regenerate code after modifying
+                this file'
+              items:
+                properties:
+                  lastTransitionTime:
+                    description: Last time the condition transitioned from one status
+                      to another.
+                    format: date-time
+                    type: string
+                  status:
+                    type: string
+                  type:
+                    type: string
+                type: object
+              type: array
+            currentVersion:
+              description: CurrentVersion changed after install release successully.
+              type: string
+            dependencies:
+              items:
+                properties:
+                  name:
+                    type: string
+                  phase:
+                    description: Only when dependency is ready the CRDRelease will
+                      continue its installation.
+                    type: string
+                  reason:
+                    type: string
+                  version:
+                    type: string
+                required:
+                - name
+                - version
+                type: object
+              type: array
+            modules:
+              items:
+                properties:
+                  conditions:
+                    description: Conditions during installation.
+                    items:
+                      properties:
+                        lastTransitionTime:
+                          description: Last time the condition transitioned from one
+                            status to another.
+                          format: date-time
+                          type: string
+                        status:
+                          type: string
+                        type:
+                          type: string
+                      type: object
+                    type: array
+                  lastState:
+                    description: Last state of the module.
+                    properties:
+                      abnormal:
+                        description: Module installation failed or readiness probe
+                          failed without recovery strategy
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                      installing:
+                        description: Module should be managed by controller and start
+                          to install itself
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                      recovering:
+                        description: Module readiness probe failed and start to recovery
+                          according to specify strategy
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                      running:
+                        description: ModuleRunning means that module finished installation
+                          and passed the readiness probe
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                      terminated:
+                        description: Module deleted success
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                    type: object
+                  name:
+                    type: string
+                  ready:
+                    description: Indicates whether module install success and ready
+                      to work.
+                    type: boolean
+                  recoverCount:
+                    description: Recover count.
+                    type: integer
+                  state:
+                    description: Current state of the module.
+                    properties:
+                      abnormal:
+                        description: Module installation failed or readiness probe
+                          failed without recovery strategy
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                      installing:
+                        description: Module should be managed by controller and start
+                          to install itself
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                      recovering:
+                        description: Module readiness probe failed and start to recovery
+                          according to specify strategy
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                      running:
+                        description: ModuleRunning means that module finished installation
+                          and passed the readiness probe
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                      terminated:
+                        description: Module deleted success
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
+                    type: object
+                required:
+                - name
+                - ready
+                type: object
+              type: array
+            phase:
+              type: string
+            reason:
+              type: string
+          type: object
+      type: object
+  version: v1beta1
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

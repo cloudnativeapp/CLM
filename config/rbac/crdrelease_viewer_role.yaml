@@ -1,0 +1,20 @@
+# permissions for end users to view crdreleases.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crdrelease-viewer-role
+rules:
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - crdreleases
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - clm.cloudnativeapp.io
+  resources:
+  - crdreleases/status
+  verbs:
+  - get
