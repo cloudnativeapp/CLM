@@ -1,0 +1,38 @@
+apiVersion: clm.cloudnativeapp.io/v1beta1
+kind: CRDRelease
+metadata:
+  name: test-native
+spec:
+  version: 1.0.0
+  modules:
+    - name: native.module
+      conditions:
+        resourceNotExist:
+          - type: CustomResourceDefinition
+            name: scaledobjects.keda.k8s.io
+      source:
+        name: native-source
+        values:
+          urls:
+            - https://cloudnativeapp.oss-cn-shenzhen.aliyuncs.com/clm/scaledobjects-crd.yaml
+          yaml: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: nginx-deployment
+              namespace: default
+            spec:
+              selector:
+                matchLabels:
+                  app: nginx
+              replicas: 2
+              template:
+                metadata:
+                  labels:
+                    app: nginx
+                spec:
+                  containers:
+                  - name: nginx
+                    image: nginx:1.14.2
+                    ports:
+                    - containerPort: 80

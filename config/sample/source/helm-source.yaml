@@ -1,0 +1,10 @@
+apiVersion: clm.cloudnativeapp.io/v1beta1
+kind: Source
+metadata:
+  name: helm-source
+spec:
+  type: helm
+  implement:
+    helm:
+      wait: true
+      timeout: 120

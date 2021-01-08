@@ -20,9 +20,7 @@ import (
 	"cloudnativeapp/clm/internal"
 	"cloudnativeapp/clm/pkg/utils"
 	"context"
-	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -72,7 +70,7 @@ func (r *SourceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if ok := internal.AddSource(source.Name, source.Spec.Implement); !ok {
 		log.V(utils.Warn).Info("source add failed", "name", source.Name)
-		return ctrl.Result{Requeue: true, RequeueAfter: CycleDelay * time.Second}, errors.New("source add failed")
+		return ctrl.Result{}, nil
 	}
 	log.V(utils.Debug).Info("source add success", "name", source.Name)
 

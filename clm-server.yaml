@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clm-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: clm-role
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: clm-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: clm-service-account
+    namespace: clm-system
+roleRef:
+  kind: ClusterRole
+  name: clm-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: clm-service-account
+  namespace: clm-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clm-server
+  namespace: clm-system
+  labels:
+    app: clm-server
+    src: cloudnativeapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clm-server
+      src: cloudnativeapp
+  template:
+    metadata:
+      labels:
+        app: clm-server
+        src: cloudnativeapp
+    spec:
+      serviceAccountName: clm-service-account
+      containers:
+        - name: clm-server
+          image: registry.cn-shenzhen.aliyuncs.com/cloudnativeapp/clm:1.0.0
+          imagePullPolicy: Always
+          args:
+            - --enable-log-file=true
+            - --log-level=debug
+          securityContext:
+            privileged: true
+      restartPolicy: Always

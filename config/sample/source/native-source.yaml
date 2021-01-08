@@ -1,0 +1,9 @@
+apiVersion: clm.cloudnativeapp.io/v1beta1
+kind: Source
+metadata:
+  name: native-source
+spec:
+  type: native
+  implement:
+    native:
+      ignoreError: false

@@ -26,6 +26,7 @@ func AddSource(name string, s implement.Implement) bool {
 		sLog.V(utils.Warn).Info("source exist already", "name", name)
 		return false
 	}
+	sLog.V(utils.Info).Info("source add success", "name", name)
 	SourcesRegistered.m[name] = s
 	return true
 }
@@ -38,6 +39,7 @@ func DeleteSource(name string) bool {
 		sLog.V(utils.Warn).Info("source does not exist", "name", name)
 		return false
 	}
+	sLog.V(utils.Info).Info("source delete success", "name", name)
 	delete(SourcesRegistered.m, name)
 	return true
 }
