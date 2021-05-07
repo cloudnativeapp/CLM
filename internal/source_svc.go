@@ -23,7 +23,9 @@ func AddSource(name string, s implement.Implement) bool {
 	defer SourcesRegistered.Unlock()
 	SourcesRegistered.Lock()
 	if _, ok := SourcesRegistered.m[name]; ok {
-		sLog.V(utils.Warn).Info("source exist already", "name", name)
+		sLog.V(utils.Info).Info("source exist already", "name", name)
+		SourcesRegistered.m[name] = s
+		sLog.V(utils.Info).Info("source implement updated")
 		return false
 	}
 	sLog.V(utils.Info).Info("source add success", "name", name)

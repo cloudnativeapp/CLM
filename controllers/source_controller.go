@@ -18,8 +18,11 @@ package controllers
 
 import (
 	"cloudnativeapp/clm/internal"
+	"cloudnativeapp/clm/pkg/helmsdk"
 	"cloudnativeapp/clm/pkg/utils"
 	"context"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
@@ -33,8 +36,9 @@ import (
 // SourceReconciler reconciles a Source object
 type SourceReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log     logr.Logger
+	Scheme  *runtime.Scheme
+	Eventer record.EventRecorder
 }
 
 const sourceFinalizer = "finalizer.clm.cloudnativeapp.io"
@@ -54,6 +58,7 @@ func (r *SourceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log.V(utils.Info).Info("succeed get source", "name", source.Name, "type", source.Spec.Type)
 	if source.GetDeletionTimestamp() != nil {
 		log.V(utils.Debug).Info("try to finalize source", "name", source.Name)
+		r.Eventer.Eventf(source, v1.EventTypeNormal, "Deleting", "try to finalize source")
 		if utils.Contains(source.GetFinalizers(), sourceFinalizer) {
 			err := r.finalizeSource(log, source)
 			if err != nil {
@@ -69,10 +74,26 @@ func (r *SourceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	if ok := internal.AddSource(source.Name, source.Spec.Implement); !ok {
-		log.V(utils.Warn).Info("source add failed", "name", source.Name)
-		return ctrl.Result{}, nil
+		log.V(utils.Info).Info("source updated", "name", source.Name)
+		// ignore add error
+		//return ctrl.Result{}, nil
+		r.Eventer.Eventf(source, v1.EventTypeNormal, "Update", "source update success")
+	} else {
+		log.V(utils.Info).Info("source add success", "name", source.Name)
+		r.Eventer.Eventf(source, v1.EventTypeNormal, "Add", "source add success")
 	}
-	log.V(utils.Debug).Info("source add success", "name", source.Name)
+
+	// Add repo for helm source
+	if source.Spec.Type == "helm" && source.Spec.Implement.Helm != nil && source.Spec.Implement.Helm.Repositories != nil {
+		for _, repo := range source.Spec.Implement.Helm.Repositories {
+			err := helmsdk.Add(repo.Name, repo.Url, repo.UserName, repo.PassWord, log)
+			if err != nil {
+				log.Error(err, "helm repo add failed")
+				r.Eventer.Eventf(source, v1.EventTypeWarning, "helm repo add failed", "error:%v", err)
+				return reconcile.Result{}, err
+			}
+		}
+	}
 
 	if !source.Status.Ready {
 		source.Status.Ready = true

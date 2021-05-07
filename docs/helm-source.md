@@ -35,5 +35,44 @@ spec:
           chartValues: {"imageUrl":"...","imageTag":"1.0.0"}  ### Helm package charts value.
 ```
 
-## TODO
-* Support helm registry setting
+## Support Helm Repository
+
+```
+apiVersion: clm.cloudnativeapp.io/v1beta1
+kind: Source
+metadata:
+  name: helm-source
+spec:
+  type: helm
+  implement:
+    helm:
+      wait: true
+      timeout: 120
+      repositories:
+        - name: bitnami                             ### Localname
+          url: https://charts.bitnami.com/bitnami   ### Repository url
+        - name: nginx-stable
+          url: https://helm.nginx.com/stable
+        - name: private
+          url: https://xxx
+          username: yourname                        ### Username of private repository
+          password: yourpasswd                      ### Password of private repository
+```
+
+## Usage In CRDRelease
+```
+apiVersion: clm.cloudnativeapp.io/v1beta1
+kind: CRDRelease
+metadata:
+  name: test-helm-repo
+spec:
+  version: 1.0.0
+  modules:
+    - name: nginx.module
+      source:
+        name: helm-source
+        values:
+          chartPath: "bitnami/nginx"
+          namespace: default
+          releaseName: bitnginx
+```

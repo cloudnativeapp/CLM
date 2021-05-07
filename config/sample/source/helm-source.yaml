@@ -8,3 +8,8 @@ spec:
     helm:
       wait: true
       timeout: 120
+      repositories:
+        - name: bitnami
+          url: https://charts.bitnami.com/bitnami
+        - name: nginx-stable
+          url: https://helm.nginx.com/stable

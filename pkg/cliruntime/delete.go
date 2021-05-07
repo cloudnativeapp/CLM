@@ -16,6 +16,10 @@ import (
 	"strings"
 )
 
+const (
+	CRD_NOT_EXIST_ERROR = "doesn't have a resource type"
+)
+
 type DeleteOptions struct {
 	Builder     *resource.Builder
 	GracePeriod int
@@ -137,6 +141,9 @@ func CheckCRNum(kind string) (int, error) {
 	g := NewGetOption(true, "", true)
 	count, err := g.Run([]string{kind})
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), CRD_NOT_EXIST_ERROR) {
+			return 0, nil
+		}
 		cLog.V(utils.Debug).Info("find resource error", "error", err.Error())
 		return 0, err
 	}

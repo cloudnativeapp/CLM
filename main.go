@@ -102,17 +102,19 @@ func main() {
 	}
 
 	if err = (&controllers.CRDReleaseReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("CRDRelease"),
-		Scheme: mgr.GetScheme(),
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("CRDRelease"),
+		Scheme:  mgr.GetScheme(),
+		Eventer: mgr.GetEventRecorderFor("CRDRelease"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "CRDRelease")
 		os.Exit(1)
 	}
 	if err = (&controllers.SourceReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Source"),
-		Scheme: mgr.GetScheme(),
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("Source"),
+		Scheme:  mgr.GetScheme(),
+		Eventer: mgr.GetEventRecorderFor("Source"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Source")
 		os.Exit(1)
@@ -121,6 +123,7 @@ func main() {
 
 	controllers.MGRClient = mgr.GetClient()
 	internal.Prober = prober.NewProber()
+	controllers.EventRecorder = mgr.GetEventRecorderFor("CRDRelease")
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")

@@ -119,7 +119,9 @@ func DoHTTPProbe(url *url.URL, headers http.Header, client GetHTTPInterface) (pr
 		err := json.Unmarshal(b, &data)
 		if err == nil {
 			if data.Data != nil {
-				out = strings.ToLower(data.Data.(string))
+				if _, ok := data.Data.(string); ok {
+					out = strings.ToLower(data.Data.(string))
+				}
 			}
 		} else {
 			probe.PLog.V(utils.Warn).Info("unmarshal error", "error", err)

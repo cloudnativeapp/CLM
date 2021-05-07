@@ -69,6 +69,8 @@ type ModuleCondition struct {
 type ModuleConditionType string
 
 const (
+	// ModuleImported means that module is imported and to be managed by controller
+	ModuleImported ModuleConditionType = "Imported"
 	// ModuleInitialized means that module did not pass condition check and not be managed by controller
 	ModuleExternal ModuleConditionType = "External"
 	// ModuleInitialized means that module passed condition check and to be managed by controller
@@ -131,7 +133,7 @@ func (m Module) ConditionCheck() (bool, error) {
 }
 
 // CheckStatus: return the action needed.
-func (m Module) CheckStatus(last Module, s *ModuleState, external bool,
+func (m Module) CheckStatus(last Module, s *ModuleState, external bool, releaseUpdated bool,
 	updateCondition func(ModuleCondition, string)) (plugin.Action, string, error) {
 	mLog.V(utils.Debug).Info("try to check module status", "module", m.Name, "last config",
 		last, "external", external)
@@ -153,8 +155,12 @@ func (m Module) CheckStatus(last Module, s *ModuleState, external bool,
 	}
 	updateCondition(
 		ModuleCondition{Type: ModuleInitialized, Status: apiextensions.ConditionTrue, LastTransitionTime: v1.Now()}, m.Name)
+	updated := releaseUpdated && !reflect.DeepEqual(m, last)
 	// Start a complete process
-	if s == nil {
+	if updated {
+		deleteModule(m.Name)
+	}
+	if s == nil || updated {
 		return m.emptyStateProc(updateCondition)
 	} else if s.Abnormal != nil {
 		mLog.V(utils.Debug).Info("abnormal module need recover", "module", m.Name)
@@ -173,8 +179,8 @@ func (m Module) CheckStatus(last Module, s *ModuleState, external bool,
 			if state == ModuleAbnormal {
 				return plugin.NeedRecover, ModuleDontCare, nil
 			}
-			// check last apply config
-			if !reflect.DeepEqual(m.Source, last.Source) {
+			// check last apply config and probe config
+			if !reflect.DeepEqual(m.Source, last.Source) || !reflect.DeepEqual(m.Readiness, last.Readiness) {
 				return plugin.NeedUpgrade, ModuleDontCare, nil
 			}
 		}
@@ -205,7 +211,7 @@ func (m Module) resetMemAfterReboot(s *ModuleState) (state string) {
 func (m Module) emptyStateProc(updateCondition func(ModuleCondition, string)) (plugin.Action, string, error) {
 	if ok, err := m.preCheck(); err != nil {
 		mLog.Error(err, "pre check failed", "name", m.Name)
-		return plugin.NeedNothing, ModuleAbnormal, err
+		return plugin.NeedNothing, PreCheckWaiting, err
 	} else if !ok {
 		mLog.V(utils.Debug).Info("module pre-check failed", "module", m.Name)
 		updateCondition(
@@ -456,7 +462,7 @@ func (m ModuleStatus) UpdateStatus(new ModuleStatus) ModuleStatus {
 		result.Name = m.Name
 	}
 	result.Ready = new.Ready
-	if new.State != nil && !moduleStateEqual(new.State, m.State) {
+	if new.State != nil && !ModuleStateEqual(new.State, m.State) {
 		result.LastState = m.State
 		result.State = new.State
 	} else {
@@ -487,7 +493,7 @@ func (m ModuleStatus) UpdateStatus(new ModuleStatus) ModuleStatus {
 	return result
 }
 
-func moduleStateEqual(new, old *ModuleState) bool {
+func ModuleStateEqual(new, old *ModuleState) bool {
 	if new == nil && old == nil {
 		return true
 	}
@@ -551,6 +557,28 @@ func GenerateExternalModuleStatus(name string) ModuleStatus {
 	status.Ready = true
 	status.Conditions = append(status.Conditions,
 		ModuleCondition{Type: ModuleExternal, Status: apiextensions.ConditionTrue, LastTransitionTime: v1.Now()})
+	status.State = GenModuleState(ModuleRunning, "", "external")
+	return status
+}
+
+//GenerateImportedModuleStatus  generate the import module status.
+func GenerateImportedModuleStatus(m Module) ModuleStatus {
+	status := ModuleStatus{}
+	status.Name = m.Name
+	status.Ready = true
+	status.Conditions = append(status.Conditions,
+		ModuleCondition{Type: ModuleImported, Status: apiextensions.ConditionTrue, LastTransitionTime: v1.Now()})
+	status.Conditions = append(status.Conditions,
+		ModuleCondition{Type: ModuleInitialized, Status: apiextensions.ConditionTrue, LastTransitionTime: v1.Now()})
+	status.Conditions = append(status.Conditions,
+		ModuleCondition{Type: ModulePreChecked, Status: apiextensions.ConditionTrue, LastTransitionTime: v1.Now()})
+	status.Conditions = append(status.Conditions,
+		ModuleCondition{Type: ModuleSourceReady, Status: apiextensions.ConditionTrue, LastTransitionTime: v1.Now()})
+	status.Conditions = append(status.Conditions,
+		ModuleCondition{Type: ModuleReady, Status: apiextensions.ConditionTrue, LastTransitionTime: v1.Now()})
+	s := GenModuleState(ModuleRunning, "", "imported")
+	m.resetMemAfterReboot(s)
+	status.State = s
 	return status
 }
 

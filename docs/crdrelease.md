@@ -180,5 +180,47 @@ status:                                             ### crd release status
     * PullError: Pull dependency from registry error.
     * Running: Only when dependency CRDRelease phase is running.
     * Abnormal: Dependency phase abnormal.
-   
     
+* events: Events list of handle CRD Release.    
+```
+Type    Reason                   Age   From        Message
+│   ----    ------                   ----  ----        -------
+│   Normal  Initialized              93s   CRDRelease  True
+│   Normal  DependenciesSatisfied    93s   CRDRelease  True
+│   Normal  Module:Initialized       93s   CRDRelease  module nginx.module condition True
+│   Normal  Module:PreChecked        93s   CRDRelease  module nginx.module condition True
+│   Normal  nginx.module:Installing  86s   CRDRelease  message: reason:
+│   Normal  ModulesReady             86s   CRDRelease  False
+│   Normal  nginx.module:Running     86s   CRDRelease
+│   Normal  ModulesReady             86s   CRDRelease  True
+│   Normal  Ready                    86s   CRDRelease  True
+
+```   
+
+### Manage Existing Resources
+Using native source:
+* `cd config/sample/import; kubectl apply -f nginx-deployment.yaml` Install nginx deployment.
+
+* `kubectl apply -f native-import-example.yaml` Install CRD Release to K8s cluster.
+
+* `kubectl describe crdrelease test-native-import` Check CRD Release status: Status->Modules->Conditions->Type:Imported.
+
+* `kubectl edit crdrelease test-native-import` Scale deployment replicas to 1 and check deployment status.
+
+Using helm source:
+
+* `helm install bitnginx bitnami/nginx` Install helm charts to K8s cluster.
+
+* `kubectl apply -f helm-import-example.yaml` Install CRD Release to K8s cluster.
+
+* `kubectl describe crdrelease test-helm-import` Check CRD Release status: Status->Modules->Conditions->Type:Imported.
+
+* `kubectl delete crdrelease test-helm-import` Delete CRD Release and check result using `helm ls -A`.
+
+
+### Upgrade CRD Release
+
+* `cd config/sample/crdrelease; kubectl apply -f native-example.yaml` Install native CRD Release.
+
+* `kubectl edit crdrelease test-native` Scale deployment replicas to 1 and check deployment status.
+

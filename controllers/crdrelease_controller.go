@@ -21,6 +21,7 @@ import (
 	"cloudnativeapp/clm/pkg/utils"
 	"context"
 	"errors"
+	v1 "k8s.io/api/core/v1"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -71,15 +72,18 @@ func (r *CRDReleaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		if p := recover(); p != nil {
 			log.Error(errors.New("panic occurs"), "panic occurs", "panic:", p)
 			r.updateRelease(log, internal.CRDReleaseAbnormal, "panic", release)
+			r.Eventer.Eventf(release, v1.EventTypeWarning, "Panic", "panic:%v", p)
 		}
 	}()
 
 	if release.GetDeletionTimestamp() != nil {
 		log.V(utils.Info).Info("crd release is going to be deleted", "name", release.Name,
 			"version", release.Spec.Version)
+		r.Eventer.Eventf(release, v1.EventTypeNormal, "Deleting", "try to finalize")
 		if utils.Contains(release.GetFinalizers(), ReleaseFinalizer) {
 			ok, err := r.finalizeRelease(log, release)
 			if err != nil {
+				r.Eventer.Eventf(release, v1.EventTypeWarning, "Error", "finalize error:%v", err)
 				return reconcile.Result{}, err
 			}
 			if !ok {
@@ -100,6 +104,7 @@ func (r *CRDReleaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	var crdReleasePhase internal.CRDReleasePhase
 	if ok, err := CheckCRDRelease(release); err != nil {
 		log.Error(err, "crd release check error", "spec", release.Spec, "status", release.Status)
+		r.Eventer.Eventf(release, v1.EventTypeWarning, "Error", "crd release check error:%v", err)
 		reason = err.Error()
 		// not all error should turn to crd release abnormal
 		if abnormalCheck(*release, err) {
@@ -119,6 +124,7 @@ func (r *CRDReleaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 
 	if updated, err := r.updateRelease(log, crdReleasePhase, reason, release); err != nil {
 		log.Error(err, "updateRelease error")
+		r.Eventer.Eventf(release, v1.EventTypeWarning, "Error", "updateRelease error:%v", err)
 		// 出现无法控制的故障，requeue也毫无意义
 		return ctrl.Result{}, err
 	} else if updated {
