@@ -3,6 +3,7 @@ package controllers
 import (
 	"cloudnativeapp/clm/api/v1beta1"
 	"cloudnativeapp/clm/internal"
+	"cloudnativeapp/clm/pkg/check/condition"
 	"cloudnativeapp/clm/pkg/dag"
 	"cloudnativeapp/clm/pkg/plugin"
 	"cloudnativeapp/clm/pkg/utils"
@@ -10,9 +11,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,6 +23,7 @@ import (
 
 var releaseLog = ctrl.Log.WithName("crd release")
 var MGRClient client.Client
+var EventRecorder record.EventRecorder
 
 const lastStatus = "clm.cloudnativeapp.io/last-configuration-status"
 const MaxRecordLen = 32 * 1024
@@ -94,7 +98,13 @@ func checkDependencies(c *v1beta1.CRDRelease) (bool, error) {
 //dependencySetStatus : Check whether dependency reach the target status.
 func dependencySetStatus(c *v1beta1.CRDRelease) plugin.StatusSet {
 	return func(name string, version string, phase interface{}) (ok bool, e error) {
-		p := phase.(internal.DependencyStatus)
+		p, o := phase.(internal.DependencyStatus)
+		if !o {
+			return
+		}
+		if p.Phase != internal.DependencyRunning {
+			EventRecorder.Eventf(c, corev1.EventTypeWarning, "Dependency:"+string(p.Phase), p.Reason)
+		}
 		releaseLog.V(utils.Debug).Info("set phase from check", "phase", p)
 		if p.Phase == internal.DependencyAbnormal || p.Phase == internal.DependencyAbsentErr || p.Phase == internal.DependencyPullingErr {
 			e = errors.New(utils.DependencyStateAbnormal)
@@ -141,7 +151,8 @@ func dependencyCheckStatus() plugin.StatusGet {
 	}
 }
 
-func getModulesUnion(current []internal.Module, lastModuleMap map[string]internal.Module) ([]plugin.Iplugin, error) {
+func getModulesUnion(current []internal.Module, lastModuleMap map[string]internal.Module,
+	imported []internal.Module) ([]plugin.Iplugin, error) {
 	releaseLog.V(utils.Debug).Info("get modules union")
 	dmap := make(map[string]internal.Module)
 	for _, i := range current {
@@ -152,6 +163,9 @@ func getModulesUnion(current []internal.Module, lastModuleMap map[string]interna
 		}
 	}
 
+	for _, k := range imported {
+		delete(dmap, k.Name)
+	}
 	if len(lastModuleMap) > 0 {
 		for k, v := range lastModuleMap {
 			if _, ok := dmap[v.Name]; !ok {
@@ -173,30 +187,43 @@ func getModulesUnion(current []internal.Module, lastModuleMap map[string]interna
 func checkModules(c *v1beta1.CRDRelease) (bool, error) {
 	releaseLog.Info("check modules", "name", c.Name, "version", c.Spec.Version)
 	//第一次进来的时候status都为空，进行一次全量external判断, 同时module需要注意external状态的破坏
+	var modulesExclude []internal.Module
 	if len(c.Status.Modules) == 0 {
 		releaseLog.V(utils.Debug).Info("check new release modules", "name", c.Name, "version", c.Spec.Version)
 		for _, m := range c.Spec.Modules {
 			if ok, err := m.ConditionCheck(); err != nil {
 				return false, err
 			} else if !ok {
-				releaseLog.V(utils.Debug).Info("condition check failed, take it as external module",
-					"name", m.Name)
-				moduleSetStatus(c)(m.Name, "", internal.GenerateExternalModuleStatus(m.Name))
+				if !reflect.DeepEqual(m.Conditions, condition.Condition{}) && m.Conditions.Strategy == condition.Import {
+					releaseLog.V(utils.Debug).Info("condition check failed, take it as an imported module",
+						"name", m.Name)
+					moduleSetStatus(c)(m.Name, "", internal.GenerateImportedModuleStatus(m))
+					EventRecorder.Eventf(c, corev1.EventTypeNormal, "Imported", "module %v imported", m.Name)
+				} else {
+					releaseLog.V(utils.Debug).Info("condition check failed, take it as an external module",
+						"name", m.Name)
+					moduleSetStatus(c)(m.Name, "", internal.GenerateExternalModuleStatus(m.Name))
+					EventRecorder.Eventf(c, corev1.EventTypeNormal, "External", "module %v external", m.Name)
+				}
+				modulesExclude = append(modulesExclude, m)
 			}
 			releaseLog.V(utils.Debug).Info("condition check passed", "name", m.Name)
 		}
 	}
 
-	mmap, err := getLastConfigModuleMap(c)
+	mmap, update, err := getLastConfigModuleMap(c)
 	if err != nil {
 		return false, err
+	}
+	if update {
+		releaseLog.V(utils.Info).Info("crd release updated", "crd release", c.Name, "version", c.Spec.Version)
 	}
 
-	modules, err := getModulesUnion(c.Spec.Modules, mmap)
+	modules, err := getModulesUnion(c.Spec.Modules, mmap, modulesExclude)
 	if err != nil {
 		return false, err
 	}
-	ready, err := plugin.CheckPlugins(modules, moduleSetStatus(c), moduleCheckStatus(c, mmap))
+	ready, err := plugin.CheckPlugins(modules, moduleSetStatus(c), moduleCheckStatus(c, mmap, update))
 	if !ready {
 		releaseLog.Info("not all modules ready", "name", c.Name, "version", c.Spec.Version)
 		updateCRDReleaseCondition(c, internal.CRDReleaseModulesReady, apiextensions.ConditionFalse)
@@ -207,30 +234,59 @@ func checkModules(c *v1beta1.CRDRelease) (bool, error) {
 	return ready, err
 }
 
-func getLastConfigModuleMap(c *v1beta1.CRDRelease) (map[string]internal.Module, error) {
+func getLastConfigModuleMap(c *v1beta1.CRDRelease) (map[string]internal.Module, bool, error) {
 	mmap := make(map[string]internal.Module)
 	var lastCRDRelease v1beta1.CRDRelease
+	update := false
 	str := c.Annotations[lastStatus]
 	releaseLog.V(utils.Debug).Info(fmt.Sprintf("last release crd: %s", str), "crd release name",
 		c.Name)
 	if len(str) > 0 {
 		if err := json.Unmarshal([]byte(str), &lastCRDRelease); err != nil {
 			releaseLog.Error(err, "unmarshal last crd release failed")
-			return nil, err
+			return nil, false, err
 		}
 		releaseLog.V(utils.Debug).Info(fmt.Sprintf("unmarshal last crd release %s", str))
+		if c.Generation > lastCRDRelease.Generation+1 {
+			update = true
+		}
 		for _, i := range lastCRDRelease.Spec.Modules {
 			mmap[i.Name] = i
 		}
 	}
-	return mmap, nil
+	return mmap, update, nil
+}
+
+func recordModuleState(c *v1beta1.CRDRelease, state *internal.ModuleState, name string) {
+	if state.Abnormal != nil {
+		EventRecorder.Eventf(c, corev1.EventTypeWarning, name+":Abnormal", "message:%v reason:%v",
+			state.Abnormal.Message, state.Abnormal.Reason)
+	}
+	if state.Recovering != nil {
+		EventRecorder.Eventf(c, corev1.EventTypeWarning, name+":Recovering", "message:%v reason:%v",
+			state.Recovering.Message, state.Recovering.Reason)
+	}
+	if state.Terminated != nil {
+		EventRecorder.Eventf(c, corev1.EventTypeNormal, name+":Terminated", "message:%v reason:%v",
+			state.Terminated.Message, state.Terminated.Reason)
+	}
+	if state.Installing != nil {
+		EventRecorder.Eventf(c, corev1.EventTypeNormal, name+":Installing", "message:%v reason:%v",
+			state.Installing.Message, state.Installing.Reason)
+	}
+	if state.Running != nil {
+		EventRecorder.Eventf(c, corev1.EventTypeNormal, name+":Running", "")
+	}
 }
 
 //moduleSetStatus Set the module status.
 func moduleSetStatus(c *v1beta1.CRDRelease) plugin.StatusSet {
 	return func(name string, version string, status interface{}) (b bool, e error) {
 		// e 来自conditioncheck，moduleCheckStatus，preCheck
-		s := status.(internal.ModuleStatus)
+		s, ok := status.(internal.ModuleStatus)
+		if !ok {
+			return
+		}
 		releaseLog.V(utils.Debug).Info(fmt.Sprintf("try to set module status %v", s),
 			"crd release name", c.Name, "module", name)
 		if s.State != nil && s.State.Abnormal != nil {
@@ -240,18 +296,22 @@ func moduleSetStatus(c *v1beta1.CRDRelease) plugin.StatusSet {
 			if j.Name == name {
 				releaseLog.V(utils.Debug).Info("update module status", "crd release name", name,
 					"module", name)
+				if s.State != nil && !internal.ModuleStateEqual(s.State, j.State) {
+					recordModuleState(c, s.State, s.Name)
+				}
 				c.Status.Modules[i] = j.UpdateStatus(s)
 				return s.Ready || (s.State != nil && s.State.Terminated != nil), e
 			}
 		}
 		releaseLog.V(utils.Debug).Info("add module status", "crd release name", name, "module", name)
+		recordModuleState(c, s.State, s.Name)
 		c.Status.Modules = append(c.Status.Modules, status.(internal.ModuleStatus))
 		return s.Ready || (s.State != nil && s.State.Terminated != nil), e
 	}
 }
 
 //moduleCheckStatus Check the status of module, return the act and phase.
-func moduleCheckStatus(c *v1beta1.CRDRelease, lastModuleMap map[string]internal.Module) plugin.StatusGet {
+func moduleCheckStatus(c *v1beta1.CRDRelease, lastModuleMap map[string]internal.Module, crdUpdate bool) plugin.StatusGet {
 	return func(name string, version string) (act plugin.Action, s string, e error) {
 		var lastState *internal.ModuleState
 		external := false
@@ -270,7 +330,7 @@ func moduleCheckStatus(c *v1beta1.CRDRelease, lastModuleMap map[string]internal.
 			"crd release name", c.Name, "module", name)
 		for _, i := range c.Spec.Modules {
 			if i.Name == name {
-				return i.CheckStatus(lastApplied, lastState, external, moduleUpdateCondition(c))
+				return i.CheckStatus(lastApplied, lastState, external, crdUpdate, moduleUpdateCondition(c))
 			}
 		}
 		releaseLog.V(utils.Warn).Info("can not find module to check status, delete it", "name", c.Name,
@@ -293,6 +353,8 @@ func moduleUpdateCondition(c *v1beta1.CRDRelease) func(internal.ModuleCondition,
 						if i.Status != m.Status {
 							i.Status = m.Status
 							i.LastTransitionTime = m.LastTransitionTime
+							EventRecorder.Eventf(c, corev1.EventTypeNormal, "Module:"+string(m.Type),
+								"module %v condition %v", name, m.Status)
 						}
 						return
 					}
@@ -300,10 +362,14 @@ func moduleUpdateCondition(c *v1beta1.CRDRelease) func(internal.ModuleCondition,
 				j.Conditions = append(j.Conditions, m)
 				releaseLog.V(utils.Debug).Info("add module condition",
 					"crd release name", c.Name, "module", name)
+				EventRecorder.Eventf(c, corev1.EventTypeNormal, "Module:"+string(m.Type),
+					"module %v condition %v", name, m.Status)
 				return
 			}
 		}
 		releaseLog.V(utils.Debug).Info("add module status", "crd release name", c.Name, "module", name)
+		EventRecorder.Eventf(c, corev1.EventTypeNormal, "Module:"+string(m.Type),
+			"module %v condition %v", name, m.Status)
 		t := internal.ModuleStatus{}
 		t.Name = name
 		t.Conditions = append(t.Conditions, m)
@@ -414,6 +480,11 @@ func moduleDeleteCheck(c *v1beta1.CRDRelease) plugin.StatusGet {
 	return func(name string, version string) (act plugin.Action, s string, e error) {
 		for _, i := range c.Status.Modules {
 			if i.Name == name {
+				if i.GetConditionStatus(internal.ModuleExternal) == apiextensions.ConditionTrue {
+					releaseLog.V(utils.Debug).Info("external module does not need uninstall", "crd release name",
+						c.Name, "module", name)
+					return plugin.NeedNothing, internal.ModuleRunning, nil
+				}
 				if i.State != nil && i.State.Terminated == nil {
 					releaseLog.V(utils.Debug).Info("module check need uninstall", "crd release name",
 						c.Name, "module", name)
@@ -483,6 +554,7 @@ func genRecordRelease(release v1beta1.CRDRelease) (v1beta1.CRDRelease, bool) {
 	// Record them for backup.
 	result.Name = release.Name
 	result.Namespace = release.Namespace
+	result.Generation = release.Generation
 	result.Spec.Version = release.Spec.Version
 	result.Spec.Dependencies = release.Spec.Dependencies
 
@@ -553,12 +625,16 @@ func updateCRDReleaseCondition(release *v1beta1.CRDRelease, conditionType intern
 		if c.Type == conditionType {
 			releaseLog.V(utils.Debug).Info("update crd release conditions", "type", conditionType,
 				"from", c.Status, "to", status)
+			if c.Status != status {
+				EventRecorder.Eventf(release, corev1.EventTypeNormal, string(conditionType), string(status))
+			}
 			release.Status.Conditions[i].Status = status
 			return
 		}
 	}
 	releaseLog.V(utils.Debug).Info("add crd release conditions", "crd release name", release.Name,
 		"version", release.Spec.Version)
+	EventRecorder.Eventf(release, corev1.EventTypeNormal, string(conditionType), string(status))
 	release.Status.Conditions = append(release.Status.Conditions,
 		internal.CRDReleaseCondition{
 			Type:               conditionType,

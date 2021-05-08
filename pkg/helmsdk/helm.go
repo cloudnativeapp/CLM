@@ -45,11 +45,17 @@ func Install(chartPath, releaseName, namespace string, vals map[string]interface
 func Uninstall(chartPath, releaseName, namespace string) (string, error) {
 	hLog.V(utils.Debug).Info("try to uninstall", "chartPath", chartPath,
 		"releaseName", releaseName, "namespace", namespace)
-	chartPath, err := download.HttpGet(chartPath)
+	chartPathLocal, err := download.HttpGet(chartPath)
 	if err != nil {
 		return "", err
 	}
-	if exist, err := Exist(chartPath, namespace); err != nil {
+	if len(chartPathLocal) == 0 {
+		chartPathLocal, err = LocateChart(chartPath, namespace)
+		if err != nil {
+			return "", err
+		}
+	}
+	if exist, err := Exist(chartPathLocal, namespace); err != nil {
 		return "", err
 	} else if !exist {
 		hLog.V(utils.Info).Info("no chart found", "chartPath", chartPath,
@@ -159,4 +165,15 @@ func getActionConfig(namespace string) (*action.Configuration, error) {
 		return nil, err
 	}
 	return actionConfig, nil
+}
+
+// Locate charts and download
+func LocateChart(chart, namespace string) (string, error) {
+	ch := action.ChartPathOptions{}
+	os.Setenv("HELM_NAMESPACE", namespace)
+	cp, err := ch.LocateChart(chart, cli.New())
+	if err != nil {
+		return "", err
+	}
+	return cp, nil
 }

@@ -32,6 +32,8 @@ type Spec struct {
 	Values       url.Values `json:"values,omitempty"`
 	// Supports post(default) put get delete patch
 	Method string `json:"method,omitempty"`
+	// Ignore the error of delete response
+	IgnoreError bool `json:"ignoreError,omitempty"`
 }
 
 type ImplementRsp struct {
@@ -68,11 +70,18 @@ func Install(log logr.Logger, svc Implement, params map[string]string) (string, 
 func Uninstall(log logr.Logger, svc Implement, params map[string]string) (string, error) {
 	rsp, err := doAction(log, svc.Name, svc.Namespace, params, svc.Uninstall)
 	if err != nil {
+		log.Error(err, "uninstall failed")
+		if svc.Uninstall.IgnoreError {
+			return "", nil
+		}
 		return "", err
 	}
 	if rsp.Code != 200 {
 		err = errors.New("uninstall failed:" + rsp.Msg)
 		log.Error(err, " message: "+rsp.Msg)
+		if svc.Uninstall.IgnoreError {
+			return "", nil
+		}
 		return "", err
 	}
 	return rsp.Msg, nil

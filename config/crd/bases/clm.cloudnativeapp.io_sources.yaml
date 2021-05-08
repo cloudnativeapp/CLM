@@ -38,16 +38,36 @@ spec:
               properties:
                 helm:
                   properties:
+                    ignoreError:
+                      type: boolean
+                    repositories:
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          password:
+                            type: string
+                          url:
+                            type: string
+                          username:
+                            type: string
+                        required:
+                        - name
+                        - url
+                        type: object
+                      type: array
                     timeout:
                       type: integer
                     wait:
-                      description: Repository string `json:"repository,omitempty"`
                       type: boolean
                   type: object
                 localService:
                   properties:
                     install:
                       properties:
+                        ignoreError:
+                          description: Ignore the error of delete response
+                          type: boolean
                         method:
                           description: Supports post(default) put get delete patch
                           type: string
@@ -73,6 +93,9 @@ spec:
                       type: string
                     recover:
                       properties:
+                        ignoreError:
+                          description: Ignore the error of delete response
+                          type: boolean
                         method:
                           description: Supports post(default) put get delete patch
                           type: string
@@ -94,6 +117,9 @@ spec:
                       type: object
                     status:
                       properties:
+                        ignoreError:
+                          description: Ignore the error of delete response
+                          type: boolean
                         method:
                           description: Supports post(default) put get delete patch
                           type: string
@@ -115,6 +141,9 @@ spec:
                       type: object
                     uninstall:
                       properties:
+                        ignoreError:
+                          description: Ignore the error of delete response
+                          type: boolean
                         method:
                           description: Supports post(default) put get delete patch
                           type: string
@@ -136,6 +165,9 @@ spec:
                       type: object
                     upgrade:
                       properties:
+                        ignoreError:
+                          description: Ignore the error of delete response
+                          type: boolean
                         method:
                           description: Supports post(default) put get delete patch
                           type: string

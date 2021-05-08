@@ -8,9 +8,17 @@ import (
 )
 
 type Implement struct {
-	//Repository string `json:"repository,omitempty"`
-	Wait    bool `json:"wait,omitempty"`
-	Timeout int  `json:"timeout,omitempty"`
+	Wait         bool   `json:"wait,omitempty"`
+	Timeout      int    `json:"timeout,omitempty"`
+	IgnoreError  bool   `json:"ignoreError,omitempty"`
+	Repositories []Repo `json:"repositories,omitempty"`
+}
+
+type Repo struct {
+	Name     string `json:"name"`
+	Url      string `json:"url"`
+	UserName string `json:"username,omitempty"`
+	PassWord string `json:"password,omitempty"`
 }
 
 func Install(i Implement, values map[string]interface{}) (string, error) {
@@ -22,16 +30,23 @@ func Upgrade(i Implement, values map[string]interface{}) (string, error) {
 }
 
 func Uninstall(i Implement, values map[string]interface{}) (string, error) {
-	releaseName := values["releaseName"].(string)
-	chartPath := values["chartPath"].(string)
-	namespace := values["namespace"].(string)
-	if len(releaseName) == 0 {
-		return "", errors.New("empty releaseName")
+	releaseName, ok := values["releaseName"].(string)
+	if !ok && len(releaseName) == 0 {
+		return "", errors.New("release name needed")
 	}
-	if len(namespace) == 0 {
+	chartPath, ok := values["chartPath"].(string)
+	if !ok {
+		return "", errors.New("chart path needed")
+	}
+	namespace, ok := values["namespace"].(string)
+	if !ok && len(namespace) == 0 {
 		namespace = "default"
 	}
-	return helmsdk.Uninstall(chartPath, releaseName, namespace)
+	result, err := helmsdk.Uninstall(chartPath, releaseName, namespace)
+	if err != nil && !i.IgnoreError {
+		return result, err
+	}
+	return result, nil
 }
 
 func Recover(i Implement, values map[string]interface{}) (string, error) {
@@ -39,8 +54,14 @@ func Recover(i Implement, values map[string]interface{}) (string, error) {
 }
 
 func Status(i Implement, values map[string]interface{}) (string, error) {
-	releaseName := values["releaseName"].(string)
-	namespace := values["namespace"].(string)
+	releaseName, ok := values["releaseName"].(string)
+	if !ok && len(releaseName) == 0 {
+		return "", errors.New("release name needed")
+	}
+	namespace, ok := values["namespace"].(string)
+	if !ok && len(namespace) == 0 {
+		namespace = "default"
+	}
 	s, err := helmsdk.Status(releaseName, namespace)
 	if err != nil {
 		return "", err
@@ -49,9 +70,18 @@ func Status(i Implement, values map[string]interface{}) (string, error) {
 }
 
 func doInstallOrUpgrade(i Implement, values map[string]interface{}) (string, error) {
-	chartPath := values["chartPath"].(string)
-	releaseName := values["releaseName"].(string)
-	namespace := values["namespace"].(string)
+	releaseName, ok := values["releaseName"].(string)
+	if !ok && len(releaseName) == 0 {
+		return "", errors.New("release name needed")
+	}
+	chartPath, ok := values["chartPath"].(string)
+	if !ok {
+		return "", errors.New("chart path needed")
+	}
+	namespace, ok := values["namespace"].(string)
+	if !ok && len(namespace) == 0 {
+		namespace = "default"
+	}
 	var vals map[string]interface{}
 	if values["chartValues"] != nil {
 		v, err := decodeValues(values["chartValues"])
@@ -60,19 +90,19 @@ func doInstallOrUpgrade(i Implement, values map[string]interface{}) (string, err
 		}
 		vals = v
 	}
-	if len(chartPath) == 0 || len(releaseName) == 0 {
-		return "", errors.New("empty chartPath or releaseName")
-	}
-	if len(namespace) == 0 {
-		namespace = "default"
-	}
 
-	chartPath, err := download.HttpGet(chartPath)
+	chartPathLocal, err := download.HttpGet(chartPath)
 	if err != nil {
 		return "", err
 	}
+	if len(chartPathLocal) == 0 {
+		chartPathLocal, err = helmsdk.LocateChart(chartPath, namespace)
+		if err != nil {
+			return "", err
+		}
+	}
 
-	installed, err := helmsdk.Exist(chartPath, namespace)
+	installed, err := helmsdk.Exist(chartPathLocal, namespace)
 	if err != nil {
 		return "", err
 	}
@@ -83,14 +113,17 @@ func doInstallOrUpgrade(i Implement, values map[string]interface{}) (string, err
 		timeoutSecond = time.Duration(i.Timeout) * time.Second
 	}
 	if installed {
-		return helmsdk.Upgrade(chartPath, releaseName, namespace, vals, i.Wait, timeoutSecond)
+		return helmsdk.Upgrade(chartPathLocal, releaseName, namespace, vals, i.Wait, timeoutSecond)
 	} else {
-		return helmsdk.Install(chartPath, releaseName, namespace, vals, i.Wait, timeoutSecond)
+		return helmsdk.Install(chartPathLocal, releaseName, namespace, vals, i.Wait, timeoutSecond)
 	}
 }
 
 func decodeValues(values interface{}) (map[string]interface{}, error) {
 	var result map[string]interface{}
-	result = values.(map[string]interface{})
+	result, ok := values.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("chartValues format error")
+	}
 	return result, nil
 }

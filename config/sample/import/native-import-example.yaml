@@ -1,0 +1,38 @@
+apiVersion: clm.cloudnativeapp.io/v1beta1
+kind: CRDRelease
+metadata:
+  name: test-native-import
+spec:
+  version: 1.0.0
+  modules:
+    - name: native.module
+      conditions:
+        resourceNotExist:
+          - type: Deployment
+            name: nginx-deployment
+            namespace: default
+        strategy: Import  # Take it as imported when conditions failed
+      source:
+        name: native-source
+        values:
+          yaml: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: nginx-deployment
+              namespace: default
+            spec:
+              selector:
+                matchLabels:
+                  app: nginx
+              replicas: 2
+              template:
+                metadata:
+                  labels:
+                    app: nginx
+                spec:
+                  containers:
+                  - name: nginx
+                    image: nginx:1.14.1
+                    ports:
+                    - containerPort: 80

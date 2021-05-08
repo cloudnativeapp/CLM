@@ -1,0 +1,14 @@
+apiVersion: clm.cloudnativeapp.io/v1beta1
+kind: CRDRelease
+metadata:
+  name: test-helm-repo
+spec:
+  version: 1.0.0
+  modules:
+    - name: nginx.module
+      source:
+        name: helm-source
+        values:
+          chartPath: "bitnami/nginx"
+          namespace: default
+          releaseName: bitnginx

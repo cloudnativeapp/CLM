@@ -20,7 +20,7 @@ type Strategy string
 
 const (
 	// When condition check failed, the module can not be managed by clm.
-	External Strategy = "PullIfAbsent"
+	External Strategy = "External"
 	// When condition check failed, we take it as a ready module.
 	Import Strategy = "Import"
 )

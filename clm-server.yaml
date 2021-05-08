@@ -54,7 +54,7 @@ spec:
       serviceAccountName: clm-service-account
       containers:
         - name: clm-server
-          image: registry.cn-shenzhen.aliyuncs.com/cloudnativeapp/clm:1.0.0
+          image: clmgroup/clm:release-2.0.0
           imagePullPolicy: Always
           args:
             - --enable-log-file=true

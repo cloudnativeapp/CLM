@@ -63,9 +63,7 @@ func CheckPlugins(ps []Iplugin, setStatus StatusSet, getStatus StatusGet) (bool,
 			pluginLog.Error(e, "check plugin error", "name", name, "version", version)
 			errs = append(errs, e)
 			ready = false
-		} else if ok {
-			ready = true
-		} else {
+		} else if !ok {
 			ready = false
 		}
 	}

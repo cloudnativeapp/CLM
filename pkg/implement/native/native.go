@@ -55,6 +55,9 @@ func deleteAction(log logr.Logger, i Implement, values map[string]interface{}) (
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
 			return err.Error(), nil
 		}
+		if i.IgnoreError {
+			return err.Error(), nil
+		}
 		return "", err
 	}
 

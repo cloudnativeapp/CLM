@@ -1,0 +1,20 @@
+apiVersion: clm.cloudnativeapp.io/v1beta1
+kind: CRDRelease
+metadata:
+  name: test-helm-import
+spec:
+  version: 1.0.0
+  modules:
+    - name: native.module
+      conditions:
+        resourceNotExist:
+          - type: Deployment
+            name: bitnginx
+            namespace: default
+        strategy: Import  # Take it as imported when conditions failed
+      source:
+        name: helm-source
+        values:
+          chartPath: "bitnami/nginx"
+          namespace: default
+          releaseName: bitnginx

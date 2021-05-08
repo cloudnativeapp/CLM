@@ -14,15 +14,11 @@ import (
 func HttpGet(p string) (string, error) {
 	u, err := url.Parse(p)
 	if err != nil || u.Scheme == "" {
-		p, _ = filepath.Abs(p)
-		if _, err := os.Stat(p); err != nil {
-			return "", err
-		}
+		return "", nil
 	} else {
 		return HttpAndFileSchemeDownload(p, u)
 	}
 
-	return "", nil
 }
 
 func HttpAndFileSchemeDownload(p string, url *url.URL) (string, error) {
